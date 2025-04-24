@@ -1,0 +1,351 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Download, Calendar, Clock, CheckCircle } from 'lucide-react';
+
+const HomeworkTracker = () => {
+  const [currentTerm, setCurrentTerm] = useState(1);
+  const [data, setData] = useState([]);
+  const [weeklyTotals, setWeeklyTotals] = useState([]);
+
+  // Initialize data structure for 4 terms, 10 weeks each
+  useEffect(() => {
+    const initialData = Array(4).fill().map((_, termIndex) => 
+      Array(10).fill().map((_, weekIndex) => ({
+        term: termIndex + 1,
+        week: weekIndex + 1,
+        days: {
+          Mon: { completed: false, hours: 1.5 },
+          Tue: { completed: false, hours: 1.5 },
+          Wed: { completed: false, hours: 1.5 },
+          Thu: { completed: false, hours: 1.5 },
+          Fri: { completed: false, hours: 1.5 },
+          Sat: { completed: false, hours: 1.5 },
+          Sun: { completed: false, hours: 3 }
+        }
+      }))
+    );
+    
+    // Set some example data with completed items
+    initialData[0][0].days.Mon.completed = true;
+    initialData[0][0].days.Tue.completed = true;
+    initialData[0][0].days.Wed.completed = true;
+    initialData[0][1].days.Mon.completed = true;
+    initialData[0][1].days.Tue.completed = true;
+    
+    setData(initialData);
+  }, []);
+
+  // Calculate weekly totals whenever data changes
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    
+    const calculateWeeklyTotals = (termData) => {
+      return termData.map(week => {
+        let totalHours = 0;
+        let completedDays = 0;
+        
+        Object.entries(week.days).forEach(([day, info]) => {
+          if (info.completed) {
+            totalHours += info.hours;
+            completedDays++;
+          }
+        });
+        
+        return {
+          week: week.week,
+          totalHours,
+          completedDays,
+          targetHours: 12 // 6 days @ 1.5 hours + 1 day @ 3 hours
+        };
+      });
+    };
+    
+    const totals = data.map(termData => calculateWeeklyTotals(termData));
+    setWeeklyTotals(totals);
+  }, [data]);
+
+  const toggleDay = (termIndex, weekIndex, day) => {
+    setData(prevData => {
+      const newData = [...prevData];
+      const weekData = newData[termIndex][weekIndex];
+      weekData.days[day].completed = !weekData.days[day].completed;
+      return newData;
+    });
+  };
+
+  const renderWeek = (weekData, termIndex, weekIndex) => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekTotal = weeklyTotals[termIndex]?.[weekIndex];
+    
+    return (
+      <div key={weekIndex} className="mb-6 p-4 bg-white rounded-lg shadow">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-lg font-semibold">Week {weekData.week}</h3>
+          <div className="text-sm">
+            <span className="font-medium">
+              {weekTotal?.totalHours} / {weekTotal?.targetHours} hours
+            </span>
+            <span className={`ml-2 px-2 py-1 rounded text-xs ${
+              weekTotal?.totalHours >= weekTotal?.targetHours 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-yellow-100 text-yellow-800'
+            }`}>
+              {weekTotal?.completedDays} / 7 days
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {days.map(day => (
+            <button
+              key={day}
+              onClick={() => toggleDay(termIndex, weekIndex, day)}
+              className={`
+                p-3 rounded-lg text-center transition-all
+                ${weekData.days[day].completed 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-gray-100 hover:bg-gray-200'
+                }
+              `}
+            >
+              <div className="font-medium">{day}</div>
+              <div className="text-xs">
+                {weekData.days[day].hours}h
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-green-500 transition-all"
+            style={{ 
+              width: `${(weekTotal?.totalHours / weekTotal?.targetHours) * 100}%` 
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const calculateTermStats = (termData, totals) => {
+    if (!termData || !totals) {
+      return { totalTermHours: 0, targetTermHours: 0, completedDays: 0, totalDays: 0 };
+    }
+    
+    const totalTermHours = totals.reduce((sum, week) => sum + week.totalHours, 0);
+    const targetTermHours = totals.reduce((sum, week) => sum + week.targetHours, 0);
+    const completedDays = totals.reduce((sum, week) => sum + week.completedDays, 0);
+    const totalDays = termData.length * 7;
+    
+    return { totalTermHours, targetTermHours, completedDays, totalDays };
+  };
+
+  const renderStats = (termIndex) => {
+    const termData = data[termIndex] || [];
+    const termTotals = weeklyTotals[termIndex] || [];
+    const stats = calculateTermStats(termData, termTotals);
+    const completionPercentage = stats.targetTermHours > 0 ? Math.round((stats.totalTermHours / stats.targetTermHours) * 100) : 0;
+    const daysPercentage = stats.totalDays > 0 ? Math.round((stats.completedDays / stats.totalDays) * 100) : 0;
+    
+    return (
+      <div className="mb-6 grid grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-2">
+              <Clock className="w-8 h-8 text-blue-600" />
+              <span className={`text-sm px-2 py-1 rounded ${
+                completionPercentage >= 80 ? 'bg-green-100 text-green-800' :
+                completionPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {completionPercentage}%
+              </span>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-600">
+                {stats.totalTermHours}
+              </div>
+              <div className="text-sm text-gray-500">
+                of {stats.targetTermHours} hours
+              </div>
+              <div className="text-sm font-medium mt-1">
+                Term Total Hours
+              </div>
+            </div>
+            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-blue-600 transition-all"
+                style={{ width: `${completionPercentage}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-2">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+              <span className={`text-sm px-2 py-1 rounded ${
+                daysPercentage >= 80 ? 'bg-green-100 text-green-800' :
+                daysPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {daysPercentage}%
+              </span>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-600">
+                {stats.completedDays}
+              </div>
+              <div className="text-sm text-gray-500">
+                of {stats.totalDays} days
+              </div>
+              <div className="text-sm font-medium mt-1">
+                Days Completed
+              </div>
+            </div>
+            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-green-600 transition-all"
+                style={{ width: `${daysPercentage}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  const exportToCSV = () => {
+    const csvContent = [];
+    
+    // Headers
+    csvContent.push(['Term', 'Week', 'Day', 'Hours', 'Completed']);
+    
+    // Data for all terms
+    data.forEach((termData, termIndex) => {
+      termData.forEach(week => {
+        Object.entries(week.days).forEach(([day, info]) => {
+          csvContent.push([
+            `Term ${termIndex + 1}`,
+            week.week,
+            day,
+            info.hours,
+            info.completed ? 'Yes' : 'No'
+          ]);
+        });
+      });
+    });
+    
+    const csv = csvContent.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'year11_homework_tracker.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const generateChartData = (termIndex) => {
+    return weeklyTotals[termIndex]?.map(week => ({
+      week: `Week ${week.week}`,
+      completed: week.totalHours,
+      target: week.targetHours,
+      remaining: Math.max(0, week.targetHours - week.totalHours)
+    })) || [];
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">
+          Year 11 Homework Tracker
+        </h1>
+        <button
+          onClick={exportToCSV}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Export Data
+        </button>
+      </div>
+      
+      {/* Term selector */}
+      <div className="mb-6 flex justify-center space-x-4">
+        {[1, 2, 3, 4].map(term => (
+          <button
+            key={term}
+            onClick={() => setCurrentTerm(term)}
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              currentTerm === term
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Term {term}
+          </button>
+        ))}
+      </div>
+      
+      <div>
+        <h2 className="text-2xl font-bold mb-4 flex items-center">
+          <Calendar className="w-6 h-6 mr-2" />
+          Term {currentTerm} Progress
+        </h2>
+        
+        {renderStats(currentTerm - 1)}
+        
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Weekly Progress Chart</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={generateChartData(currentTerm - 1)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="week" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="completed" fill="#10B981" name="Completed Hours" />
+                  <Bar dataKey="target" fill="#E5E7EB" name="Target Hours" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {data[currentTerm - 1]?.map((week, index) => 
+          renderWeek(week, currentTerm - 1, index)
+        )}
+      </div>
+      
+      <div className="mt-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg">
+        <h3 className="font-semibold mb-3 flex items-center">
+          <Clock className="w-5 h-5 mr-2" />
+          Daily Goals and Targets
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="font-medium text-gray-700">Monday-Saturday</div>
+            <div className="text-2xl font-bold text-blue-600">1-2 hours</div>
+            <div className="text-sm text-gray-500">per day</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="font-medium text-gray-700">Sunday</div>
+            <div className="text-2xl font-bold text-blue-600">2-4 hours</div>
+            <div className="text-sm text-gray-500">per day</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="font-medium text-gray-700">Weekly Target</div>
+            <div className="text-2xl font-bold text-green-600">12 hours</div>
+            <div className="text-sm text-gray-500">total</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default HomeworkTracker;
